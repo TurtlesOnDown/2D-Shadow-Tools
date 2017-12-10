@@ -1,65 +1,65 @@
-﻿Shader "Unlit/LightShader"
+﻿Shader "Falloff"
 {
-	Properties
-	{
-        _Color ("Light Color", Color) = (1, 1, 0, 1)
-        _LightCenter ("Light Center", Vector) = (0, 0, 0, 0)
-        _LightRadius ("Light Radius", float) = 10
-	}
-	SubShader
-	{
-		Tags { "Queue" = "Transparent" "RenderType"="Transparent" }
-		LOD 100
+    Properties
+    {
+      _MainTex("Texture", 2D) = "white" {}
+      _LightPosition("LightPosition", Vector) = (0,0,0,0)
+      _Radius("LightRadius", Float) = 1
+      _Falloff("LightFalloff", Range(0, 4)) = 1
+      _Color("Light Color", Color) = (1, 1, 1, 1)
+    }
 
-        ZWrite Off
-        Blend DstAlpha One
+    SubShader
+    {
 
-		Pass
-		{
-			CGPROGRAM
-			#pragma vertex vert
-			#pragma fragment frag
-			// make fog work
-			#pragma multi_compile_fog
-			
-			#include "UnityCG.cginc"
+      Tags{ "Queue" = "Transparent" "RenderType" = "Transparent" }
 
-			struct appdata
-			{
-				float4 vertex : POSITION;
-                float4 color : COLOR;
-			};
+    Pass
+    {
+      ZWrite Off
+      Blend SrcAlpha OneMinusSrcAlpha
+      CGPROGRAM
+    #pragma vertex vert
+    #pragma fragment frag
+    #include "UnityCG.cginc"
 
-			struct v2f
-			{
-				float4 vertex : SV_POSITION;
-                float4 color : COLOR;
-			};
+    struct appdata
+    {
+      float4 vertex : POSITION;
+      float2 uv : TEXCOORD0;
+    };
 
-            fixed4 _Color;
-            fixed4 _LightCenter;
-            float _LightRadius;
-			
-			v2f vert (appdata v)
-			{
-				v2f o;
-				o.vertex = UnityObjectToClipPos(v.vertex);
-                o.color = v.color;
-                o.color.a = 1 - (length(_LightCenter.xyz - v.vertex.xyz) / _LightRadius);
-                //o.distance = length(v.vertex.xyz - _LightCenter.xyz);
-				return o;
-			}
-			
-            fixed4 frag (v2f i) : SV_Target
-			{
-                fixed4 col = _Color;
-                
-                float distance = length(_LightCenter.xyz - i.vertex.xyz);
-                //col.a = 1 - (distance / _LightRadius);
-				return i.color;
-			}
-			ENDCG
-		}
-	}
+    struct v2f
+    {
+      float2 uv : TEXCOORD0;
+      float4 vertex : SV_POSITION;
+      float3 pos : float3;
+    };
+
+    sampler2D _MainTex;
+    float4 _MainTex_ST;
+    float4 _LightPosition;
+    float _Radius;
+    float _Falloff;
+    fixed4 _Color;
+
+    v2f vert(appdata v)
+    {
+      v2f o;
+      o.vertex = UnityObjectToClipPos(v.vertex);
+      o.pos = mul(unity_ObjectToWorld, v.vertex).xyz;
+      o.uv = TRANSFORM_TEX(v.uv, _MainTex);
+      return o;
+    }
+
+    fixed4 frag(v2f i) : SV_Target
+    {
+      fixed4 col = tex2D(_MainTex, i.uv) * _Color;
+      float distance = length(_LightPosition - i.pos.xy) / _Radius;
+      col.a = max(0, min(1, 1 - pow(distance, _Falloff)));
+      return col;
+    }
+      ENDCG
+    }
+  }
 }
-
