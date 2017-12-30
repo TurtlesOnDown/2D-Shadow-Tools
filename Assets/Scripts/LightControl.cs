@@ -10,29 +10,29 @@ public class LightControl : MonoBehaviour {
     public ContactFilter2D layerfilter;
     public Color LightColor; 
 
-    private Vector3 center;
+    private Vector3 lightCenter;
     private CircleCollider2D colliderCircle;
 
 	// Use this for initialization
 	void Start () {
-        center = transform.position;
+        lightCenter = transform.position;
         colliderCircle = gameObject.GetComponent<CircleCollider2D>();
 	}
 
 	// Update is called once per frame
 	void Update () {
-        center = transform.position;
+        lightCenter = transform.position;
 
         // Detect objects within the light radius
         Collider2D[] results = new Collider2D[10];
-        int collisions = Physics2D.OverlapCircle(center, lightRadius, layerfilter, results);
+        int collisions = Physics2D.OverlapCircle(lightCenter, lightRadius, layerfilter, results);
         // Create list of points to send ray casts to
         List<Vector2> rayCastPoints = new List<Vector2>();
         // Add points at edge of light radius
-        rayCastPoints.Add(new Vector2(center.x + lightRadius, center.y + lightRadius));
-        rayCastPoints.Add(new Vector2(center.x - lightRadius, center.y + lightRadius));
-        rayCastPoints.Add(new Vector2(center.x + lightRadius, center.y - lightRadius));
-        rayCastPoints.Add(new Vector2(center.x - lightRadius, center.y - lightRadius));
+        rayCastPoints.Add(new Vector2(lightCenter.x + lightRadius, lightCenter.y + lightRadius));
+        rayCastPoints.Add(new Vector2(lightCenter.x - lightRadius, lightCenter.y + lightRadius));
+        rayCastPoints.Add(new Vector2(lightCenter.x + lightRadius, lightCenter.y - lightRadius));
+        rayCastPoints.Add(new Vector2(lightCenter.x - lightRadius, lightCenter.y - lightRadius));
         
         // For every object hit, push the corners into raycast points
         foreach (Collider2D collision in results)
@@ -49,6 +49,10 @@ public class LightControl : MonoBehaviour {
                 {
                     rayCastPoints.AddRange(getPolygonPoints((PolygonCollider2D)collision));
                 }
+                else if (collision.GetType() == typeof(CircleCollider2D))
+                {
+                    rayCastPoints.AddRange(getCirclePoints((CircleCollider2D)collision));
+                }
             }
         }
         // Send ray casts to each corner
@@ -60,7 +64,7 @@ public class LightControl : MonoBehaviour {
         // Order Raycasts in clockwise order
         vertices.Sort(sortAngleClockwise);
         // Push in the center
-        vertices.Add(center);
+        vertices.Add(lightCenter);
 
         // build light mesh
         Mesh lightMesh = createLightMesh(vertices);
@@ -69,7 +73,7 @@ public class LightControl : MonoBehaviour {
         MeshRenderer rend = GetComponent<MeshRenderer>();
         rend.material.SetColor("_Color", LightColor);
         rend.material.SetFloat("_Radius", lightRadius - 2);
-        rend.material.SetVector("_LightPosition", center);
+        rend.material.SetVector("_LightPosition", lightCenter);
         rend.material.SetFloat("_Falloff", lightFalloff);
     }
 
@@ -118,11 +122,37 @@ public class LightControl : MonoBehaviour {
         return results;
     }
 
+    List<Vector2> getCirclePoints(CircleCollider2D circle)
+    {
+        Transform parent = circle.gameObject.GetComponent<Transform>();
+        List<Vector2> results = new List<Vector2>();
+        // Find the line orthogonal to line that runs through the middle of the circle
+        Vector2 orthogonalLine = parent.position - lightCenter;
+        orthogonalLine = new Vector2(orthogonalLine.y, orthogonalLine.x);
+        orthogonalLine.Normalize();
+        orthogonalLine *= (circle.radius);
+        results.Add((new Vector2(parent.position.x, parent.position.y) + orthogonalLine) * 5f);
+        results.Add((new Vector2(parent.position.x, parent.position.y) - orthogonalLine) * 5f);
+        //results.Add(new Vector2(parent.position.x, parent.position.y) + orthogonalLine * (1.0f + 0.05f * circle.radius));
+        //results.Add(new Vector2(parent.position.x, parent.position.y) - orthogonalLine * (1.0f + 0.05f * circle.radius));
+        results.Add(new Vector2(parent.position.x, parent.position.y));
+        //Debug.Log(new Vector2(parent.position.x, parent.position.y) + orthogonalLine);
+        //Debug.Log(new Vector2(parent.position.x, parent.position.y) - orthogonalLine);
+
+        for (float i = .25f; i < 1; i += .25f)
+        {
+            results.Add(new Vector2(parent.position.x, parent.position.y) + orthogonalLine * i);
+            results.Add(new Vector2(parent.position.x, parent.position.y) - orthogonalLine * i);
+        }
+
+        return results;
+    }
+
     // Sorts points based on angle in a clockwise direction
     int sortAngleClockwise(Vector3 a, Vector3 b)
     {
-        Vector2 lineA = new Vector2(center.x - a.x, center.y - a.y);
-        Vector2 lineB = new Vector2(center.x - b.x, center.y - b.y);
+        Vector2 lineA = new Vector2(lightCenter.x - a.x, lightCenter.y - a.y);
+        Vector2 lineB = new Vector2(lightCenter.x - b.x, lightCenter.y - b.y);
 
         float angleA = Mathf.Rad2Deg * Mathf.Atan(lineA.y / lineA.x);
         float angleB = Mathf.Rad2Deg * Mathf.Atan(lineB.y / lineB.x);
@@ -151,6 +181,7 @@ public class LightControl : MonoBehaviour {
         Vector3[] vertices = new Vector3[verts.Count];
         for (int i = 0; i < verts.Count; i++)
         {
+            Debug.DrawRay(lightCenter, transform.InverseTransformPoint(verts[i]));
             vertices[i] = transform.InverseTransformPoint(verts[i]); 
         }
         // Create triangle array
@@ -186,40 +217,40 @@ public class LightControl : MonoBehaviour {
     {
         RaycastHit2D[] target = new RaycastHit2D[1];
         // Raycast fro the center to the point, and to the left and to the right
-        Vector2 direction = point - new Vector2(center.x, center.y);
-        Vector2 left = rotatePointbyRadians(direction, 0.000001f);
-        Vector2 right = rotatePointbyRadians(direction, -0.000001f);
+        Vector2 direction = point - new Vector2(lightCenter.x, lightCenter.y);
+        Vector2 left = rotatePointbyRadians(direction, 0.00001f);
+        Vector2 right = rotatePointbyRadians(direction, -0.00001f);
         // Aim for point
         if (colliderCircle.Raycast(direction, layerfilter, target, lightRadius) == 0)
         {
             // if no collision, push in a point on the radius
             direction.Normalize();
-            vertices.Add(new Vector3((direction.x * lightRadius) + center.x, (direction.y * lightRadius) + center.y, center.z));
+            vertices.Add(new Vector3((direction.x * lightRadius) + lightCenter.x, (direction.y * lightRadius) + lightCenter.y, lightCenter.z));
         }
         else
         {
             // if collision, push in the collision point
-            vertices.Add(new Vector3(target[0].point.x, target[0].point.y, center.z));
+            vertices.Add(new Vector3(target[0].point.x, target[0].point.y, lightCenter.z));
         }
         // Aim left
         if (colliderCircle.Raycast(left, layerfilter, target, lightRadius) == 0)
         {
             left.Normalize();
-            vertices.Add(new Vector3((left.x * lightRadius) + center.x, (left.y * lightRadius) + center.y, center.z));
+            vertices.Add(new Vector3((left.x * lightRadius) + lightCenter.x, (left.y * lightRadius) + lightCenter.y, lightCenter.z));
         }
         else
         {
-            vertices.Add(new Vector3(target[0].point.x, target[0].point.y, center.z));
+            vertices.Add(new Vector3(target[0].point.x, target[0].point.y, lightCenter.z));
         }
         // Aim Right
         if (colliderCircle.Raycast(right, layerfilter, target, lightRadius) == 0)
         {
             right.Normalize();
-            vertices.Add(new Vector3((right.x * lightRadius) + center.x, (right.y * lightRadius) + center.y, center.z));
+            vertices.Add(new Vector3((right.x * lightRadius) + lightCenter.x, (right.y * lightRadius) + lightCenter.y, lightCenter.z));
         }
         else
         {
-            vertices.Add(new Vector3(target[0].point.x, target[0].point.y, center.z));
+            vertices.Add(new Vector3(target[0].point.x, target[0].point.y, lightCenter.z));
         }
     }
 }
